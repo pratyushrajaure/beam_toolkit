@@ -1,0 +1,24 @@
+{
+  "E": 200000000000.0,
+  "I": 8e-06,
+  "spans": [
+    2.0,
+    4.0,
+    6.0
+  ],
+  "point_loads": [
+    1000,
+    2000,
+    5000
+  ],
+  "uniform_loads": [
+    500,
+    1000,
+    2000
+  ],
+  "offcenter_fraction": 0.3,
+  "cases": [
+    "ss_center",
+    "ss_triangle"
+  ]
+}
