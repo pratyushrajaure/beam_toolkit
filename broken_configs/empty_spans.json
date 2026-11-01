@@ -1,0 +1,9 @@
+{
+  "E": 200e9,
+  "I": 8e-6,
+  "spans": [],
+  "point_loads": [1000, 2000, 5000],
+  "uniform_loads": [500, 1000, 2000],
+  "offcenter_fraction": 0.3,
+  "cases": ["ss_center", "ss_offcenter", "ss_udl", "cant_end", "cant_udl"]
+}
