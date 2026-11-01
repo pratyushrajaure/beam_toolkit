@@ -143,4 +143,5 @@ def main():
     print_check_table(results)
 
 
-main()
+if __name__ == "__main__":
+    main()
