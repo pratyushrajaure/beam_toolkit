@@ -1,3 +1,13 @@
+"""Beam deflection formulas, NumPy version.
+
+Every function takes x as a NumPy array (or a single number) and a dictionary d.
+It returns deflection with the same shape as x. Downward deflection is positive.
+
+The old loop version is kept in beams_loop.py for comparison.
+"""
+import numpy as np
+
+
 def ss_center_left(x, d):
     return d["P"] * x * (3 * d["L"] ** 2 - 4 * x ** 2) / (48 * d["E"] * d["I"])
 
@@ -7,10 +17,8 @@ def ss_center_right(x, d):
 
 
 def ss_center(x, d):
-    if x <= d["L"] / 2:
-        return ss_center_left(x, d)
-    else:
-        return ss_center_right(x, d)
+    # np.where(condition, value_if_true, value_if_false), decided point by point
+    return np.where(x <= d["L"] / 2, ss_center_left(x, d), ss_center_right(x, d))
 
 
 def ss_offcenter_left(x, d):
@@ -26,10 +34,7 @@ def ss_offcenter_right(x, d):
 
 
 def ss_offcenter(x, d):
-    if x <= d["a"]:
-        return ss_offcenter_left(x, d)
-    else:
-        return ss_offcenter_right(x, d)
+    return np.where(x <= d["a"], ss_offcenter_left(x, d), ss_offcenter_right(x, d))
 
 
 def ss_udl(x, d):
