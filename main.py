@@ -49,6 +49,8 @@ def validate(cfg):
     for name in cfg["cases"]:
         if name not in beams.BEAM_FUNCTIONS:
             raise ValueError(f"unknown beam case '{name}'")
+
+
 def run_cases(cfg):
     """Returns (tables, results).
     tables:  one DataFrame per beam type (all spans, loads, positions, deflections)
