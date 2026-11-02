@@ -13,6 +13,24 @@ def load_config(filename):
 
 
 def validate(cfg):
+    def is_number(value):
+        return type(value) in (int, float)
+
+    if type(cfg) is not dict:
+        raise ValueError("config must be a JSON object")
+    for key in ["E", "I", "offcenter_fraction"]:
+        if not is_number(cfg[key]):
+            raise ValueError(f"{key} must be a number, got {cfg[key]!r}")
+    for key in ["spans", "point_loads", "uniform_loads", "cases"]:
+        if type(cfg[key]) is not list:
+            raise ValueError(f"'{key}' must be a list, got {cfg[key]!r}")
+    for key in ["spans", "point_loads", "uniform_loads"]:
+        for value in cfg[key]:
+            if not is_number(value):
+                raise ValueError(f"every value in '{key}' must be a number, got {value!r}")
+    for key in ["spans", "cases"]:
+        if len(cfg[key]) == 0:
+            raise ValueError(f"'{key}' must not be empty")
     for key in ["E", "I"]:
         if cfg[key] <= 0:
             raise ValueError(f"{key} must be positive, got {cfg[key]}")
@@ -143,4 +161,5 @@ def main():
     print_check_table(results)
 
 
-main()
+if __name__ == "__main__":
+    main()

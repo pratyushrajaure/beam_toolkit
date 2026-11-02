@@ -84,3 +84,11 @@ A bad configuration is rejected with a one-line error message. Examples are in
 - `checks.py`: the closed-form checks used in the self-check table
 - `config.json`: default input
 - `broken_configs/`: deliberately invalid inputs for testing error handling
+
+## Tests
+
+    python test_validation.py
+
+Runs every file in `broken_configs/` through `validate()` and checks that each
+one is rejected with a clear error, and that `config.json` is still
+accepted. Prints `all checks passed` on success.
