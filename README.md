@@ -1,8 +1,10 @@
 # Beam Deflection Toolkit
 
-Computes the deflection of five beam types over a range of spans and loads,
-writes the largest deflection of every case to a CSV file, and checks the
-results against closed-form solutions.
+Computes the deflection of five beam types over a range of spans and loads
+using NumPy arrays. For every beam type it writes a CSV table with all
+positions and deflections and a plot of the deflection curves. It also writes
+the largest deflection of every case to `results.csv` and checks the results
+against closed-form solutions and against the earlier loop based version.
 
 ## Beam types
 
@@ -19,12 +21,20 @@ Set in `config.json` under `cases`. `x` is measured from the left end.
 ## Requirements
 
 - Python 3 (developed on 3.13)
-- No third-party packages; only the standard library (`csv`, `json`, `sys`)
+- NumPy, pandas and Matplotlib (versions are listed in `requirements.txt`)
 
 ## Installation
 
-Download or clone this repository and open a terminal in the project folder.
-There is nothing to install.
+Clone this repository, open a terminal in the project folder, create a
+virtual environment and install the packages:
+
+    python -m venv .venv
+    source .venv/Scripts/activate
+    pip install -r requirements.txt
+
+The `activate` line is for Git Bash on Windows. In Command Prompt or PowerShell
+use `.venv\Scripts\activate`. On Linux or macOS use `source .venv/bin/activate`.
+Activate the environment again in every new terminal.
 
 ## Usage
 
@@ -35,6 +45,9 @@ Run with the default configuration:
 Run with another configuration file:
 
     python main.py path/to/other_config.json
+
+Every plot opens in its own window; close it to continue to the next one. To
+only save the figures, set `SHOW_PLOTS = False` at the top of `plotting.py`.
 
 On Windows, if `python` is not found, use `py` instead.
 
@@ -53,22 +66,37 @@ On Windows, if `python` is not found, use `py` instead.
 | `cases` | list of beam types to run | none |
 
 Every case is run for every span and every load of its kind, so the default
-configuration gives 5 cases x 3 spans x 3 loads = 45 rows.
+configuration gives 5 cases x 3 spans x 3 loads = 45 rows in `results.csv`.
+Each span is divided into 101 equally spaced positions with
+`np.linspace(0, L, 101)`.
 
 ## Output
 
-`results.csv` has one row per case, with the columns `beam_type`, `span_m`,
-`load_value`, `load_unit` and `max_deflection_m`. The maximum is the largest
-deflection found at 101 equally spaced points along the span.
+Everything below is regenerated on every run and is not stored in the
+repository.
+
+- `outputs/<beam_type>.csv`: one table per beam type with the columns
+  `beam_type`, `span_m`, `load_value`, `load_unit`, `x_m` and `deflection_m`.
+  The default configuration gives 3 spans x 3 loads x 101 positions = 909 rows.
+- `outputs/<beam_type>.png`: one plot per beam type. It shows the three spans
+  under the middle load, with the maximum of each span marked. The y axis is
+  inverted, so downward deflection is drawn downward. Deflection is in mm.
+- `results.csv`: one row per case, with the columns `beam_type`, `span_m`,
+  `load_value`, `load_unit` and `max_deflection_m`.
 
 The console also prints the largest deflection for each beam type and a
 self-check table:
 
-- closed-form maximum (not available for `ss_offcenter`)
+- closed-form maximum (for `ss_offcenter` the maximum lies between two grid
+  points, so a looser tolerance of 1e-4 is used there)
 - continuity of the deflection at the load point (`ss_center`, `ss_offcenter`)
 - zero deflection at both supports (`ss_center`, `ss_offcenter`)
+- hand-calculated value at L/4 and 3L/4 (`ss_center`)
+- symmetry about midspan (`ss_center`, `ss_udl`)
+- NumPy result equals the loop version at every point (all cases)
 
-`results.csv` is regenerated on every run and is not stored in the repository.
+Finally the maxima are compared with `day2_results.csv`, the saved results of
+the first version of this toolkit.
 
 ## Invalid input
 
@@ -77,13 +105,29 @@ A bad configuration is rejected with a one-line error message. Examples are in
 
     python main.py broken_configs/negative_I.json
 
+If an output file cannot be written, for example because it is open in Excel,
+the program prints an error and stops.
+
+## Speed comparison
+
+    python benchmark.py
+
+Times the loop version (`beams_loop.py`) against the NumPy version (`beams.py`)
+on one million positions and checks that both give the same values.
+
 ## Files
 
-- `main.py`: reads the config, validates it, runs all cases, writes the CSV
-- `beams.py`: the deflection function for each beam type
-- `checks.py`: the closed-form checks used in the self-check table
+- `main.py`: reads the config, validates it, runs all cases, writes the tables, plots and CSV
+- `beams.py`: the deflection function for each beam type, using NumPy arrays
+- `beams_loop.py`: the earlier loop based version, kept for comparison
+- `checks.py`: the closed-form and array checks used in the self-check table
+- `plotting.py`: one plot per beam type
+- `benchmark.py`: speed comparison of loop and NumPy versions
 - `config.json`: default input
+- `day2_results.csv`: results of the first version, used as a reference
+- `requirements.txt`: package versions
 - `broken_configs/`: deliberately invalid inputs for testing error handling
+- `test_validation.py`: tests for config validation
 
 ## Tests
 
