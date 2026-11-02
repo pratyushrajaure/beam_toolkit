@@ -1,10 +1,16 @@
 import csv
 import json
+import os
 import sys
+import numpy as np
+import pandas as pd
 import beams
 import checks
+import plotting
 
 N_POINTS = 101
+OUTPUT_DIR = "outputs"
+DAY2_RESULTS = "day2_results.csv"
 
 
 def load_config(filename):
@@ -45,37 +51,49 @@ def validate(cfg):
             raise ValueError(f"unknown beam case '{name}'")
 
 
-#I am just trying this two times, one with normal loop and next with list comprehension which is just below this
-def max_deflection_loop(func, d):
-    values = []
-    for i in range(N_POINTS):
-        x = i * d["L"] / (N_POINTS - 1)
-        values.append(func(x, d))
-    return max(values)
-
-
-def max_deflection(func, d):
-    #Just for fun, using list comprehension for same result
-    return max([func(i * d["L"] / (N_POINTS - 1), d) for i in range(N_POINTS)])
-
-
 def run_cases(cfg):
+    """Returns (tables, results).
+    tables:  one DataFrame per beam type (all spans, loads, positions, deflections)
+    results: one entry per span/load combination, used by the checks
+    """
+    tables = {}
     results = []
     for case in cfg["cases"]:
         func = beams.BEAM_FUNCTIONS[case]
         kind = beams.LOAD_KIND[case]
         loads = cfg["point_loads"] if kind == "point" else cfg["uniform_loads"]
         key = "P" if kind == "point" else "w"
+        unit = "N" if kind == "point" else "N/m"
+        pieces = []
         for L in cfg["spans"]:
+            x = np.linspace(0, L, N_POINTS)          # 101 positions from 0 to L
             for load in loads:
                 d = {"E": cfg["E"], "I": cfg["I"], "L": L, key: load,
                      "a": cfg["offcenter_fraction"] * L}
-                y_loop = max_deflection_loop(func, d)
-                y = max_deflection(func, d)
-                if y_loop != y:
-                    raise ValueError("loop and list comprehension disagree")
-                results.append({"case": case, "d": d, "y": y, "load": load})
-    return results
+                y = func(x, d)                        # whole array at once
+                pieces.append(pd.DataFrame({
+                    "beam_type": case, "span_m": L,
+                    "load_value": load, "load_unit": unit,
+                    "x_m": x, "deflection_m": y}))
+                results.append({"case": case, "d": d, "load": load,
+                                "x": x, "y_all": y, "y": y.max()})
+        tables[case] = pd.concat(pieces, ignore_index=True)
+    return tables, results
+
+
+def save_tables(tables):
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    for case, table in tables.items():
+        table.to_csv(f"{OUTPUT_DIR}/{case}.csv", index=False)
+
+
+def make_plots(tables, cfg):
+    for case, table in tables.items():
+        kind = beams.LOAD_KIND[case]
+        loads = cfg["point_loads"] if kind == "point" else cfg["uniform_loads"]
+        unit = "N" if kind == "point" else "N/m"
+        mid_load = loads[len(loads) // 2]            # middle load
+        plotting.plot_beam(table, case, cfg["spans"], mid_load, unit)
 
 
 def save_csv(results, filename):
@@ -110,6 +128,22 @@ def print_largest_per_beam(rows):
               f"{best['load_unit']}  max deflection={best_value:.6e} m")
 
 
+def compare_with_day2(new_file, old_file):
+    """True/False: do new maxima equal Day 2 maxima? None if no Day 2 file."""
+    if not os.path.exists(old_file):
+        return None
+    new = pd.read_csv(new_file)
+    old = pd.read_csv(old_file)
+    if len(new) != len(old):
+        return False
+    same_rows = (new["beam_type"] == old["beam_type"]).all() and \
+                np.allclose(new["span_m"], old["span_m"]) and \
+                np.allclose(new["load_value"], old["load_value"])
+    same_values = np.allclose(new["max_deflection_m"], old["max_deflection_m"],
+                              rtol=checks.TOL, atol=0)
+    return bool(same_rows and same_values)
+
+
 def print_check_table(results):
     table = {}
 
@@ -121,18 +155,26 @@ def print_check_table(results):
 
     for r in results:
         case, d, y = r["case"], r["d"], r["y"]
-        expected = checks.closed_form_max(case, d)
+        expected, tol = checks.closed_form_max(case, d)
         if expected is not None:
-            record(f"{case}: closed-form maximum", checks.close(y, expected))
+            label = "closed-form maximum"
+            if case == "ss_offcenter":
+                label = "closed-form maximum (grid tol)"
+            record(f"{case}: {label}", checks.close(y, expected, tol))
         if case in ("ss_center", "ss_offcenter"):
             record(f"{case}: continuity at break", checks.continuity_ok(case, d))
-            record(f"{case}: zero at both supports", checks.boundary_ok(case, d, y))
+            record(f"{case}: zero at both supports", checks.boundary_ok(r["y_all"], y))
+        if case == "ss_center":
+            record("ss_center: value at L/4 and 3L/4", checks.quarter_point_ok(d, r["y_all"]))
+        if case in ("ss_center", "ss_udl"):
+            record(f"{case}: symmetric about L/2", checks.symmetric_ok(r["y_all"]))
+        record(f"{case}: array equals Day 2 loop code", checks.matches_loop(case, d, r["x"], r["y_all"]))
 
     print("\nSelf-check table:")
-    print(f"  {'check':38s} {'passed':>7s}  result")
+    print(f"  {'check':42s} {'passed':>7s}  result")
     for name, (passed, total) in table.items():
         result = "PASS" if passed == total else "FAIL"
-        print(f"  {name:38s} {passed:>3d}/{total:<3d}  {result}")
+        print(f"  {name:42s} {passed:>3d}/{total:<3d}  {result}")
 
 
 def main():
@@ -140,7 +182,7 @@ def main():
     try:
         cfg = load_config(config_file)
         validate(cfg)
-        results = run_cases(cfg)
+        tables, results = run_cases(cfg)
     except FileNotFoundError:
         print(f"Error: config file '{config_file}' not found.")
         return
@@ -154,11 +196,27 @@ def main():
         print(f"Error: {e}")
         return
 
-    save_csv(results, "results.csv")
+    try:
+        save_csv(results, "results.csv")
+        save_tables(tables)
+    except PermissionError as e:
+        print(f"Error: cannot write '{e.filename}'. Is it open in Excel?")
+        return
     print(f"{len(results)} cases written to results.csv")
+    print(f"{len(tables)} tables written to {OUTPUT_DIR}/ (one CSV per beam type)")
+
     rows = read_csv("results.csv")
     print_largest_per_beam(rows)
     print_check_table(results)
+
+    same = compare_with_day2("results.csv", DAY2_RESULTS)
+    if same is None:
+        print(f"\nDay 2 comparison skipped: '{DAY2_RESULTS}' not found.")
+    else:
+        print("\nMaxima match Day 2 results.csv (np.allclose):", "PASS" if same else "FAIL")
+
+    make_plots(tables, cfg)
+    print(f"{len(tables)} plots saved to {OUTPUT_DIR}/")
 
 
 if __name__ == "__main__":
